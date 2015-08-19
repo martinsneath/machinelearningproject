@@ -5,14 +5,80 @@ date: "`r Sys.Date()`"
 output: html_document
 ---
 The goal of this project is to predict how the subjects did the exercise based on predictors
+First we add libraries, read the testing and training file in 
+```{r, echo=FALSE}
+library(caret)
+set.seed(12345);# for reproducibility
+train=read.csv("pml-training.csv")
+test=read.csv("pml-testing.csv")
+cutoff=.75; # for correlation
+#dim (test);dim(train)
+```
+Then we examine the data and used pca and correlation to find number of factors on those items that were the actual measurements and those items that were summary figures for each exercise by each individual
+```{r,echo=FALSE}
+# find number of factors on non summarized items
+tra=train[train$new_window=="no",]
+# first 7 variables are not performance related
+tra1=tra[,8:160]
+# take out the non numerics
+tra1=tra1[sapply(tra1,is.numeric)]
+# add the performance indicator back
+tra1=cbind(tra1,tra$classe)
+names(tra1)[length(tra1)]="classe"
+tra1=tra1[,colSums(is.na(tra1))!=nrow(tra1)] 
+p=preProcess(tra1[,1:length(tra1)-1],method="pca")
+# calculate correlations between factors
+# http://machinelearningmastery.com/feature-selection-with-the-caret-r-package/
 
-```{r}
-# read the training file in
-tr=read.csv("pml-training.csv")
-preProc=preProcess(tr[,7:159],method="pca")
-trainPC=predict(preProc,a[,-1])
-modelfit=train(a$diagnosis~.,method="glm",data=trainPC)
-#train 69 without the +1, only 70 wit +1 - answer s/b .71
-testPC=predict(preProc,testing[,58:69])
-confusionMatrix(testing$diagnosis,predict(modelfit,testPC))
+c=cor(tra1[,1:length(tra1)-1])
+# find attributes highly correlated
+h=findCorrelation(c,cutoff=cutoff)
+tra2=tra1[-h]
+```
+Actuals show `r p$numComp` principal components
+and `r length(tra2)` factors after correlation over `r cutoff`
+```{r,echo=FALSE}
+#find factors on summarized items
+trw=train[complete.cases(train),]
+# first 7 variables are not performance related
+trw1=trw[,8:160]
+trw1=trw[sapply(trw,is.numeric)]
+trw1=cbind(trw1,trw$classe)
+names(trw1)[length(trw1)]="classe"
+p=preProcess(trw1[,5:length(trw1)-1],method="pca")
+# calculate correlations between factors
+c=cor(trw1[,1:length(trw1)-1])
+# find attributes highly correlated
+h=findCorrelation(c,cutoff=cutoff)
+trw2=trw1[-h]
+```
+While the summary data show `r p$numComp` principal components
+and `r length(trw2)` factors after correlation over `r cutoff`
+As the summary is just measures of such items as kurtosis, skewness, mins and maxes of each exercise we find that the actual measurements may be the best indicator of whether the exercise will be completed properly as there are many less principal components so then proceed with our analysis
+```{r,echo=FALSE}
+m=train(classe~.,data=tra2,method="rf",prox=TRUE)
+# started 11:12
+# cross validation is k-fold
+folds <- createFolds(y=tra1$classe,k=10,list=TRUE,returnTrain=TRUE)
+lm(tra1$classe~.,data=tra1)
+#trainPC=predict(preProc,tra1[,-124])
+#modelfit=train(tra1$classe~.,method="glm",data=tra1)
+#testPC=predict(preProc,testing[,58:69])
+#confusionMatrix(testing$diagnosis,predict(modelfit,testPC))
+# expect the out of sample error to be and estimate the error appropriately with cross-validation
+#folds <- createFolds(y=tr$classe,k=10,list=TRUE,returnTrain=TRUE)
+#featurePlot(x=tr[,1:10], y = tr$classe,plot="pairs")
+# for plotting all the variables
+#for (i in 5:123){
+#     pdf(paste("",names(tr)[i],'.pdf'))
+#     plot(y=tr[,i],tr$classe,ylab=names(tr)[i])
+#     dev.off()
+#}
+# function to apply pca to dataframe
+#pcafit <- function(x){
+#     names(x)[length(x)]="classe"
+#     p=preProcess(x[,1:length(x)-1],method="pca")
+#     p$numComp
+#     }
+```
 
